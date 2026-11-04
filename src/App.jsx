@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { getMockClerkResponse } from './clerk-mock.js';
 
 const FEELINGS_DE = [
   { value: 'Traurigkeit', label: 'Traurigkeit (Melancholie, Weltschmerz)' },
@@ -294,6 +295,7 @@ export default function App() {
 
     const chosenFeeling = isOther ? (customFeeling.trim() || (lang === 'de' ? 'Unbenanntes Gefühl' : 'Unnamed feeling')) : feeling;
 
+    let data;
     try {
       const response = await fetch('/api/submit', {
         method: 'POST',
@@ -306,62 +308,62 @@ export default function App() {
         }),
       });
 
-      const data = await response.json();
-      setResult(data);
-
-      // Random stamp rotation between -6 and +6 degrees as specified
-      const randomAngle = (Math.random() * 12 - 6).toFixed(1);
-      setStampAngle(randomAngle);
-
-      // Save petition & official decree to local Amtsarchiv
-      const archiveItem = {
-        id: Date.now().toString(),
-        aktenzeichen,
-        date: submissionDate,
-        timestamp: Date.now(),
+      if (!response.ok) {
+        throw new Error(`Server returned status: ${response.status}`);
+      }
+      data = await response.json();
+    } catch (err) {
+      console.warn('Backend proxy unreachable (static deployment or offline). Activating in-browser Ministerialrätin simulation:', err);
+      data = getMockClerkResponse({
         feeling: chosenFeeling,
         intensity,
         justification,
         language: lang,
-        decision: data.decision,
-        reply: data.reply,
-        ps: data.ps,
-        crisis: Boolean(data.crisis),
-        stampAngle: randomAngle,
-      };
-
-      setArchive((prev) => {
-        const next = [archiveItem, ...prev].slice(0, 50);
-        try {
-          localStorage.setItem('amt_fuer_gefuehle_archive_v1', JSON.stringify(next));
-        } catch (err) {
-          console.warn('LocalStorage save failed:', err);
-        }
-        return next;
       });
+    }
 
-      setStatus('result');
+    setResult(data);
 
-      // Trigger screen thud vibration & acoustic impact if not crisis mode
-      if (!data.crisis) {
-        setTimeout(() => {
-          playThud();
-          setIsShaking(true);
-          setTimeout(() => setIsShaking(false), 300);
-        }, 220);
+    // Random stamp rotation between -6 and +6 degrees as specified
+    const randomAngle = (Math.random() * 12 - 6).toFixed(1);
+    setStampAngle(randomAngle);
+
+    // Save petition & official decree to local Amtsarchiv
+    const archiveItem = {
+      id: Date.now().toString(),
+      aktenzeichen,
+      date: submissionDate,
+      timestamp: Date.now(),
+      feeling: chosenFeeling,
+      intensity,
+      justification,
+      language: lang,
+      decision: data.decision,
+      reply: data.reply,
+      ps: data.ps,
+      crisis: Boolean(data.crisis),
+      stampAngle: randomAngle,
+    };
+
+    setArchive((prev) => {
+      const next = [archiveItem, ...prev].slice(0, 50);
+      try {
+        localStorage.setItem('amt_fuer_gefuehle_archive_v1', JSON.stringify(next));
+      } catch (err) {
+        console.warn('LocalStorage save failed:', err);
       }
-    } catch (err) {
-      console.error('Submission failed:', err);
-      setResult({
-        decision: 'rejected',
-        reply: lang === 'de'
-          ? 'Das Amt ist derzeit nicht erreichbar. Bitte versuchen Sie es später erneut. Oder früher. Nein, später.'
-          : 'The Office is currently unavailable. Please try again later. Or earlier. No, later.',
-        ps: lang === 'de' ? 'Amtsvermerk: Aktenmappe unauffindbar.' : 'Official note: Dossier temporarily mislaid.',
-        crisis: false
-      });
-      setStampAngle(-3.5);
-      setStatus('result');
+      return next;
+    });
+
+    setStatus('result');
+
+    // Trigger screen thud vibration & acoustic impact if not crisis mode
+    if (!data.crisis) {
+      setTimeout(() => {
+        playThud();
+        setIsShaking(true);
+        setTimeout(() => setIsShaking(false), 300);
+      }, 220);
     }
   };
 
